@@ -60,7 +60,7 @@ By utilizing AWS Lambda in conjunction with AWS CloudFormation, you can efficien
 
 ## Using the Lambda Function
 
-Deploying and utilizing this Lambda function is straightforward. Simply run the function in any AWS region where you wish to map your infrastructure(any test event configuration can be used to trigger the function). Upon execution, the function scans your existing AWS setup in that region, including resources such as EC2 instances, VPCs, and other relevant components. It then proceeds to generate a CloudFormation template, reflecting your infrastructure's current state. This output is formatted and made available in the logs. The beauty of this process lies in its simplicity and the ease with which one can generate up-to-date infrastructure templates, a crucial step in maintaining robust security and efficient management. 
+Deploying and utilizing this Lambda function is straightforward. Simply run the function in any AWS region where you wish to map your infrastructure(any test event configuration can be used to trigger the function). Add the IAM policy to the role assigned to the lambda funciton. Upon execution, the function scans your existing AWS setup in that region, including resources such as EC2 instances, VPCs, and other relevant components. It then proceeds to generate a CloudFormation template, reflecting your infrastructure's current state. This output is formatted and made available in the logs. The beauty of this process lies in its simplicity and the ease with which one can generate up-to-date infrastructure templates, a crucial step in maintaining robust security and efficient management. 
 
 ### Benefits of the Lambda Function in AWS Security
 
