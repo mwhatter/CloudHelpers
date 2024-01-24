@@ -10,6 +10,9 @@ logger.setLevel(logging.INFO)
 
 # Initialize Boto3 clients
 ec2 = boto3.client('ec2')
+elb = boto3.client('elb')
+rds = boto3.client('rds')
+s3 = boto3.client('s3')
 workspaces = boto3.client('workspaces')
 
 # Helper functions to fetch AWS resources
@@ -63,7 +66,7 @@ def get_vpc_peering_connections():
     logger.info("Fetching VPC peering connections")
     return ec2.describe_vpc_peering_connections()['VpcPeeringConnections']
 
-# CloudFormation resource functions
+# CloudFormation resource functions for VPCs, Subnets, Security Groups, EC2 Instances, etc.
 def cloudformation_vpc(vpc):
     vpc_resource_name = sanitize_name(vpc['VpcId'])
     return {
@@ -129,7 +132,6 @@ def cloudformation_workspace_instance(workspace):
         }
     }
 
-
 def cloudformation_vpc_peering_connection(vpc_peering):
     peering_resource_name = sanitize_name(vpc_peering['VpcPeeringConnectionId'])
     return {
@@ -142,6 +144,83 @@ def cloudformation_vpc_peering_connection(vpc_peering):
             'Tags': [{'Key': 'Name', 'Value': peering_resource_name}] 
         }
     }
+	
+# CloudFormation resource function for ELB
+def cloudformation_elb(elb_description):
+    elb_resource_name = sanitize_name(elb_description['LoadBalancerName'])
+    listeners = [{
+        'LoadBalancerPort': listener['Listener']['LoadBalancerPort'],
+        'InstancePort': listener['Listener']['InstancePort'],
+        'Protocol': listener['Listener']['Protocol'],
+    } for listener in elb_description['ListenerDescriptions']]
+
+    return {
+        'Type': 'AWS::ElasticLoadBalancing::LoadBalancer',
+        'Properties': {
+            'LoadBalancerName': elb_description['LoadBalancerName'],
+            'Listeners': listeners,
+            'HealthCheck': {
+                'Target': elb_description['HealthCheck']['Target'],
+                'HealthyThreshold': str(elb_description['HealthCheck']['HealthyThreshold']),
+                'UnhealthyThreshold': str(elb_description['HealthCheck']['UnhealthyThreshold']),
+                'Interval': str(elb_description['HealthCheck']['Interval']),
+                'Timeout': str(elb_description['HealthCheck']['Timeout'])
+            },
+            'Subnets': elb_description.get('Subnets', []),
+            'SecurityGroups': elb_description.get('SecurityGroups', []),
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in elb_description.get('Tags', [])]
+        }
+    }
+
+# CloudFormation resource function for RDS
+def cloudformation_rds_instance(rds_instance):
+    rds_resource_name = sanitize_name(rds_instance['DBInstanceIdentifier'])
+    
+    return {
+        'Type': 'AWS::RDS::DBInstance',
+        'Properties': {
+            'DBInstanceIdentifier': rds_instance['DBInstanceIdentifier'],
+            'AllocatedStorage': str(rds_instance['AllocatedStorage']),
+            'DBInstanceClass': rds_instance['DBInstanceClass'],
+            'Engine': rds_instance['Engine'],
+            'MasterUsername': rds_instance['MasterUsername'],
+            'MasterUserPassword': 'REPLACE_WITH_PASSWORD',
+            'DBSubnetGroupName': rds_instance.get('DBSubnetGroup', {}).get('DBSubnetGroupName', ''),
+            'VPCSecurityGroups': [sg['VpcSecurityGroupId'] for sg in rds_instance.get('VpcSecurityGroups', [])],
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in rds_instance.get('TagList', [])]
+        }
+    }
+
+# CloudFormation resource function for S3
+def cloudformation_s3_bucket(bucket):
+    bucket_resource_name = sanitize_name(bucket['Name'])
+
+    return {
+        'Type': 'AWS::S3::Bucket',
+        'Properties': {
+            'BucketName': bucket['Name'],
+            'VersioningConfiguration': {
+                'Status': 'Enabled'
+            },
+            'LoggingConfiguration': {
+                'DestinationBucketName': 'my-logging-bucket',
+                'LogFilePrefix': f'logs/{bucket["Name"]}/'
+            },
+            'AccessControl': 'Private',
+            'CorsConfiguration': {
+                'CorsRules': [
+                    {
+                        'AllowedHeaders': ['*'],
+                        'AllowedMethods': ['GET', 'PUT'],
+                        'AllowedOrigins': ['http://www.example.com'],
+                        'ExposedHeaders': ['x-amz-server-side-encryption'],
+                        'MaxAge': 3000
+                    }
+                ]
+            },
+            # More properties can be added as per your bucket configuration
+        }
+    }
 
 def lambda_handler(event, context):
     cf_template = {
@@ -149,40 +228,49 @@ def lambda_handler(event, context):
         'Resources': {}
     }
 
+    # Process each AWS service and add to the CloudFormation template
     try:
-        # Process VPCs and related resources
         for vpc in get_vpcs():
             vpc_resource_name = sanitize_name(vpc['VpcId'])
             cf_template['Resources'][vpc_resource_name] = cloudformation_vpc(vpc)
 
-            try:
-                for subnet in get_subnets(vpc['VpcId']):
-                    subnet_resource_name = sanitize_name(subnet['SubnetId'])
-                    cf_template['Resources'][subnet_resource_name] = cloudformation_subnet(subnet, vpc_resource_name)
-            except Exception as e:
-                logger.error(f"Error processing subnets: {str(e)}")
+            for subnet in get_subnets(vpc['VpcId']):
+                subnet_resource_name = sanitize_name(subnet['SubnetId'])
+                cf_template['Resources'][subnet_resource_name] = cloudformation_subnet(subnet, vpc_resource_name)
 
-            try:
-                for sg in get_security_groups(vpc['VpcId']):
-                    sg_resource_name = sanitize_name(sg['GroupId'])
-                    cf_template['Resources'][sg_resource_name] = cloudformation_security_group(sg, vpc_resource_name)
-            except Exception as e:
-                logger.error(f"Error processing security groups: {str(e)}")
+            for sg in get_security_groups(vpc['VpcId']):
+                sg_resource_name = sanitize_name(sg['GroupId'])
+                cf_template['Resources'][sg_resource_name] = cloudformation_security_group(sg, vpc_resource_name)
 
-        try:
-            # Process EC2 instances
-            for reservation in get_ec2_instances():
+            for reservation in get_ec2_instances(vpc['VpcId']):
                 for instance in reservation['Instances']:
                     instance_resource_name = sanitize_name(instance['InstanceId'])
                     cf_template['Resources'][instance_resource_name] = cloudformation_ec2_instance(instance)
-        except Exception as e:
-            logger.error(f"Error processing EC2 instances: {str(e)}")
-
     except Exception as e:
         logger.error(f"Error processing VPCs and their related resources: {str(e)}")
 
     try:
-        # Process WorkSpaces instances
+        for elb_description in get_elbs():
+            elb_resource_name = sanitize_name(elb_description['LoadBalancerName'])
+            cf_template['Resources'][elb_resource_name] = cloudformation_elb(elb_description)
+    except Exception as e:
+        logger.error(f"Error processing ELBs: {str(e)}")
+
+    try:
+        for rds_instance in get_rds_instances():
+            rds_resource_name = sanitize_name(rds_instance['DBInstanceIdentifier'])
+            cf_template['Resources'][rds_resource_name] = cloudformation_rds_instance(rds_instance)
+    except Exception as e:
+        logger.error(f"Error processing RDS instances: {str(e)}")
+
+    try:
+        for bucket in get_s3_buckets():
+            bucket_resource_name = sanitize_name(bucket['Name'])
+            cf_template['Resources'][bucket_resource_name] = cloudformation_s3_bucket(bucket)
+    except Exception as e:
+        logger.error(f"Error processing S3 buckets: {str(e)}")
+
+    try:
         for workspace in get_workspace_instances():
             workspace_resource_name = sanitize_name(workspace['WorkspaceId'])
             cf_template['Resources'][workspace_resource_name] = cloudformation_workspace_instance(workspace)
@@ -190,7 +278,6 @@ def lambda_handler(event, context):
         logger.error(f"Error processing WorkSpaces instances: {str(e)}")
 
     try:
-        # Process VPC peering connections
         for vpc_peering in get_vpc_peering_connections():
             peering_resource_name = sanitize_name(vpc_peering['VpcPeeringConnectionId'])
             cf_template['Resources'][peering_resource_name] = cloudformation_vpc_peering_connection(vpc_peering)
@@ -200,8 +287,6 @@ def lambda_handler(event, context):
     logger.info(f"CloudFormation Template: {json.dumps(cf_template, indent=4)}")
     return json.dumps(cf_template, indent=4)
 
-# For local testing or direct invocation
 if __name__ == "__main__":
     cloudformation_template = lambda_handler(None, None)
     print(cloudformation_template)
-
