@@ -1,6 +1,6 @@
 # Introduction
 
-In the realm of cloud computing, securing AWS infrastructure remains a top priority, as emphasized by the experts at Paladin Cloud. While they offer comprehensive strategies for fortifying AWS environments, a critical aspect often overlooked is the infrastructure's foundational architecture. This brings us to the pivotal concept of Infrastructure as Code (IaC), a method that's reshaping how we manage and secure cloud resources. Bridging this gap, I've developed a unique Lambda function that elegantly converts existing AWS infrastructure into CloudFormation templated code, reinforcing security by design.
+In the realm of cloud computing, securing AWS infrastructure remains a top priority. While they offer comprehensive strategies for fortifying AWS environments, a critical aspect often overlooked is the infrastructure's foundational architecture. This brings us to the pivotal concept of Infrastructure as Code (IaC), a method that's reshaping how we manage and secure cloud resources. Bridging this gap, I've developed a unique Lambda function that elegantly converts existing AWS infrastructure into CloudFormation templated code, reinforcing security by design.
 
 ## Understanding Infrastructure as Code (IaC)
 
