@@ -65,6 +65,34 @@ def get_workspace_instances():
 def get_vpc_peering_connections():
     logger.info("Fetching VPC peering connections")
     return ec2.describe_vpc_peering_connections()['VpcPeeringConnections']
+    
+def get_elbs():
+    logger.info("Fetching Elastic Load Balancers")
+    try:
+        response = elb.describe_load_balancers()
+        return response['LoadBalancerDescriptions']
+    except Exception as e:
+        logger.error(f"Error fetching ELBs: {str(e)}")
+        return []
+
+def get_rds_instances():
+    logger.info("Fetching RDS instances")
+    try:
+        response = rds.describe_db_instances()
+        return response['DBInstances']
+    except Exception as e:
+        logger.error(f"Error fetching RDS instances: {str(e)}")
+        return []
+
+def get_s3_buckets():
+    logger.info("Fetching S3 buckets")
+    try:
+        response = s3.list_buckets()
+        return response['Buckets']
+    except Exception as e:
+        logger.error(f"Error fetching S3 buckets: {str(e)}")
+        return []
+
 
 # CloudFormation resource functions for VPCs, Subnets, Security Groups, EC2 Instances, etc.
 def cloudformation_vpc(vpc):
