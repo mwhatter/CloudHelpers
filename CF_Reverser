@@ -1,0 +1,207 @@
+import json
+import boto3
+import re
+import logging
+import base64
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Initialize Boto3 clients
+ec2 = boto3.client('ec2')
+workspaces = boto3.client('workspaces')
+
+# Helper functions to fetch AWS resources
+def get_vpcs():
+    logger.info("Fetching VPCs")
+    return ec2.describe_vpcs()['Vpcs']
+
+def get_subnets(vpc_id):
+    logger.info(f"Fetching subnets for VPC {vpc_id}")
+    return ec2.describe_subnets(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['Subnets']
+
+def get_security_groups(vpc_id):
+    logger.info(f"Fetching security groups for VPC {vpc_id}")
+    return ec2.describe_security_groups(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['SecurityGroups']
+
+def get_ec2_instances(vpc_id):
+    logger.info(f"Fetching EC2 instances for VPC {vpc_id}")
+    return ec2.describe_instances(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['Reservations']
+
+def get_nat_gateways(vpc_id):
+    logger.info(f"Fetching NAT gateways for VPC {vpc_id}")
+    return ec2.describe_nat_gateways(Filter=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['NatGateways']
+
+def get_route_tables(vpc_id):
+    logger.info(f"Fetching route tables for VPC {vpc_id}")
+    return ec2.describe_route_tables(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['RouteTables']
+
+def get_network_acls(vpc_id):
+    logger.info(f"Fetching network ACLs for VPC {vpc_id}")
+    return ec2.describe_network_acls(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['NetworkAcls']
+
+def sanitize_name(name):
+    logger.info(f"Sanitizing name: {name}")
+    return re.sub(r'[^a-zA-Z0-9]', '', name)
+
+def get_user_data(instance_id):
+    try:
+        response = ec2.describe_instance_attribute(InstanceId=instance_id, Attribute='userData')
+        user_data = response.get('UserData')
+        if user_data and 'Value' in user_data:
+            return base64.b64encode(user_data['Value'].encode('utf-8')).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Error fetching user data for instance {instance_id}: {str(e)}")
+    return None
+
+def get_workspace_instances():
+    logger.info("Fetching WorkSpaces instances")
+    return workspaces.describe_workspaces()['Workspaces']
+
+def get_vpc_peering_connections():
+    logger.info("Fetching VPC peering connections")
+    return ec2.describe_vpc_peering_connections()['VpcPeeringConnections']
+
+# CloudFormation resource functions
+def cloudformation_vpc(vpc):
+    vpc_resource_name = sanitize_name(vpc['VpcId'])
+    return {
+        'Type': 'AWS::EC2::VPC',
+        'Properties': {
+            'CidrBlock': vpc['CidrBlock'],
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in vpc.get('Tags', [])]
+        }
+    }
+
+def cloudformation_subnet(subnet, vpc_resource_name):
+    subnet_resource_name = sanitize_name(subnet['SubnetId'])
+    return {
+        'Type': 'AWS::EC2::Subnet',
+        'Properties': {
+            'VpcId': {'Ref': vpc_resource_name},
+            'CidrBlock': subnet['CidrBlock'],
+            'AvailabilityZone': subnet['AvailabilityZone'],
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in subnet.get('Tags', [])]
+        }
+    }
+
+def cloudformation_security_group(sg, vpc_resource_name):
+    sg_resource_name = sanitize_name(sg['GroupId'])
+    return {
+        'Type': 'AWS::EC2::SecurityGroup',
+        'Properties': {
+            'VpcId': {'Ref': vpc_resource_name},
+            'GroupName': sg['GroupName'],
+            'GroupDescription': sg['Description'],
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in sg.get('Tags', [])]
+        }
+    }
+
+def cloudformation_ec2_instance(instance):
+    instance_resource_name = sanitize_name(instance['InstanceId'])
+    user_data = get_user_data(instance['InstanceId'])
+    properties = {
+        'InstanceType': instance['InstanceType'],
+        'ImageId': instance['ImageId'],
+        'UserData': user_data,
+        'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in instance.get('Tags', [])]
+    }
+    if 'SubnetId' in instance:
+        properties['SubnetId'] = {'Ref': sanitize_name(instance['SubnetId'])}
+    return {
+        'Type': 'AWS::EC2::Instance',
+        'Properties': properties
+    }
+
+def cloudformation_workspace_instance(workspace):
+    workspace_resource_name = sanitize_name(workspace['WorkspaceId'])
+    return {
+        'Type': 'AWS::WorkSpaces::Workspace',
+        'Properties': {
+            'DirectoryId': workspace['DirectoryId'],
+            'BundleId': workspace['BundleId'],
+            'UserName': workspace['UserName'],
+            'RootVolumeEncryptionEnabled': False,  
+            'UserVolumeEncryptionEnabled': False,  
+            'VolumeEncryptionKey': '',  
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in workspace.get('Tags', [])]
+        }
+    }
+
+
+def cloudformation_vpc_peering_connection(vpc_peering):
+    peering_resource_name = sanitize_name(vpc_peering['VpcPeeringConnectionId'])
+    return {
+        'Type': 'AWS::EC2::VPCPeeringConnection',
+        'Properties': {
+            'PeerVpcId': vpc_peering['AccepterVpcInfo']['VpcId'],
+            'VpcId': vpc_peering['RequesterVpcInfo']['VpcId'],
+            'PeerOwnerId': '',  
+            'PeerRegion': '',  
+            'Tags': [{'Key': 'Name', 'Value': peering_resource_name}] 
+        }
+    }
+
+def lambda_handler(event, context):
+    cf_template = {
+        'AWSTemplateFormatVersion': '2010-09-09',
+        'Resources': {}
+    }
+
+    try:
+        # Process VPCs and related resources
+        for vpc in get_vpcs():
+            vpc_resource_name = sanitize_name(vpc['VpcId'])
+            cf_template['Resources'][vpc_resource_name] = cloudformation_vpc(vpc)
+
+            try:
+                for subnet in get_subnets(vpc['VpcId']):
+                    subnet_resource_name = sanitize_name(subnet['SubnetId'])
+                    cf_template['Resources'][subnet_resource_name] = cloudformation_subnet(subnet, vpc_resource_name)
+            except Exception as e:
+                logger.error(f"Error processing subnets: {str(e)}")
+
+            try:
+                for sg in get_security_groups(vpc['VpcId']):
+                    sg_resource_name = sanitize_name(sg['GroupId'])
+                    cf_template['Resources'][sg_resource_name] = cloudformation_security_group(sg, vpc_resource_name)
+            except Exception as e:
+                logger.error(f"Error processing security groups: {str(e)}")
+
+        try:
+            # Process EC2 instances
+            for reservation in get_ec2_instances():
+                for instance in reservation['Instances']:
+                    instance_resource_name = sanitize_name(instance['InstanceId'])
+                    cf_template['Resources'][instance_resource_name] = cloudformation_ec2_instance(instance)
+        except Exception as e:
+            logger.error(f"Error processing EC2 instances: {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Error processing VPCs and their related resources: {str(e)}")
+
+    try:
+        # Process WorkSpaces instances
+        for workspace in get_workspace_instances():
+            workspace_resource_name = sanitize_name(workspace['WorkspaceId'])
+            cf_template['Resources'][workspace_resource_name] = cloudformation_workspace_instance(workspace)
+    except Exception as e:
+        logger.error(f"Error processing WorkSpaces instances: {str(e)}")
+
+    try:
+        # Process VPC peering connections
+        for vpc_peering in get_vpc_peering_connections():
+            peering_resource_name = sanitize_name(vpc_peering['VpcPeeringConnectionId'])
+            cf_template['Resources'][peering_resource_name] = cloudformation_vpc_peering_connection(vpc_peering)
+    except Exception as e:
+        logger.error(f"Error processing VPC Peering Connections: {str(e)}")
+
+    logger.info(f"CloudFormation Template: {json.dumps(cf_template, indent=4)}")
+    return json.dumps(cf_template, indent=4)
+
+# For local testing or direct invocation
+if __name__ == "__main__":
+    cloudformation_template = lambda_handler(None, None)
+    print(cloudformation_template)
+
