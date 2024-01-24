@@ -64,7 +64,7 @@ Deploying and utilizing this Lambda function is straightforward. Simply run the 
 
 ### Benefits of the Lambda Function in AWS Security
 
-Aligning with the AWS security best practices highlighted by Paladin Cloud, this function plays a pivotal role. By automating the generation of CloudFormation templates, it ensures that your infrastructure setup is consistent, repeatable, and free from manual errors, which are often the root cause of security vulnerabilities. Additionally, by programmatically defining your infrastructure, it becomes easier to review, audit, and comply with security policies.
+Aligning with the AWS security best practices this function plays a pivotal role. By automating the generation of CloudFormation templates, it ensures that your infrastructure setup is consistent, repeatable, and free from manual errors, which are often the root cause of security vulnerabilities. Additionally, by programmatically defining your infrastructure, it becomes easier to review, audit, and comply with security policies.
 
 ### Integration with CloudFormation
 
