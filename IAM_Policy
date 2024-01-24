@@ -1,49 +1,59 @@
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DescribeInstances",
-                "ec2:DescribeVpcs",
-                "ec2:*",
-                "ec2:DescribeNatGateways",
-                "ec2:DescribeSubnets",
-                "ec2:DescribeNetworkAcls",
-                "ec2:DescribeRouteTables",
-                "ec2:DescribeSecurityGroups"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "VisualEditor1",
-            "Effect": "Allow",
-            "Action": "logs:*",
-            "Resource": "arn:aws:logs:*:*:*"
-        },
-        {
-            "Sid": "VisualEditor2",
-            "Effect": "Allow",
-            "Action": "logs:CreateLogGroup",
-            "Resource": "arn:aws:logs:<region>:<account>:*"
-        },
-        {
-            "Sid": "VisualEditor3",
-            "Effect": "Allow",
-            "Action": [
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-            ],
-            "Resource": [
-                "arn:aws:logs:<region>:<account>:log-group:/aws/lambda/<policy-name>:*"
-            ]
-        },
-        {
-            "Sid": "VisualEditor4",
-            "Effect": "Allow",
-            "Action": "workspaces:DescribeWorkspaces",
-            "Resource": "*"
-        }
-    ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "VisualEditor0",
+			"Effect": "Allow",
+			"Action": [
+				"workspaces:DescribeConnectionAliasPermissions",
+				"workspaces:DescribeWorkspaceImages",
+				"elasticloadbalancing:DescribeLoadBalancerPolicyTypes",
+				"workspaces:ListAvailableManagementCidrRanges",
+				"workspaces:DescribeApplicationAssociations",
+				"elasticloadbalancing:GetTrustStoreRevocationContent",
+				"elasticloadbalancing:DescribeLoadBalancers",
+				"elasticloadbalancing:DescribeTrustStoreAssociations",
+				"workspaces:DescribeAccountModifications",
+				"workspaces:DescribeWorkspacesConnectionStatus",
+				"elasticloadbalancing:DescribeListeners",
+				"elasticloadbalancing:GetTrustStoreCaCertificatesBundle",
+				"elasticloadbalancing:DescribeLoadBalancerPolicies",
+				"elasticloadbalancing:DescribeListenerCertificates",
+				"elasticloadbalancing:DescribeInstanceHealth",
+				"workspaces:DescribeWorkspaceDirectories",
+				"workspaces:DescribeWorkspaces",
+				"workspaces:DescribeClientBranding",
+				"workspaces:DescribeBundleAssociations",
+				"elasticloadbalancing:DescribeSSLPolicies",
+				"workspaces:DescribeAccount",
+				"elasticloadbalancing:DescribeTags",
+				"workspaces:DescribeWorkspaceSnapshots",
+				"workspaces:DescribeWorkspaceBundles",
+				"workspaces:DescribeClientProperties",
+				"elasticloadbalancing:DescribeTrustStoreRevocations",
+				"workspaces:DescribeApplications",
+				"workspaces:DescribeImageAssociations",
+				"elasticloadbalancing:DescribeLoadBalancerAttributes",
+				"workspaces:DescribeConnectClientAddIns",
+				"workspaces:DescribeWorkspaceAssociations",
+				"elasticloadbalancing:DescribeTargetGroupAttributes",
+				"workspaces:DescribeConnectionAliases",
+				"workspaces:DescribeTags",
+				"elasticloadbalancing:DescribeTrustStores",
+				"elasticloadbalancing:DescribeAccountLimits",
+				"workspaces:DescribeWorkspaceImagePermissions",
+				"workspaces:DescribeIpGroups",
+				"elasticloadbalancing:DescribeTargetHealth",
+				"elasticloadbalancing:DescribeTargetGroups",
+				"elasticloadbalancing:DescribeRules"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "VisualEditor1",
+			"Effect": "Allow",
+			"Action": "logs:*",
+			"Resource": "arn:aws:logs:*:*:*"
+		}
+	]
 }
