@@ -14,6 +14,10 @@ When discussing IaC in the AWS ecosystem, CloudFormation emerges as a quintessen
 
 The centerpiece of our discussion is a Lambda function, meticulously crafted to transform existing AWS infrastructure into CloudFormation templates. This Python-based function leverages Boto3, AWS's SDK for Python, to interact with various AWS services like EC2, WorkSpaces, and VPCs. Key operations include fetching VPCs, subnets, security groups, EC2 instances, and more, which are then converted into CloudFormation's JSON formatted template. This automation ensures that your existing infrastructure is accurately and efficiently replicated in CloudFormation's declarative coding language.
 
+## Using the Lambda Function
+
+Deploying and utilizing this Lambda function is straightforward. Simply run the function in any AWS region where you wish to map your infrastructure. Upon execution, the function scans your existing AWS setup in that region, including resources such as EC2 instances, VPCs, and other relevant components. It then proceeds to generate a CloudFormation template, reflecting your infrastructure's current state. This output is formatted and made available in the logs. The beauty of this process lies in its simplicity and the ease with which one can generate up-to-date infrastructure templates, a crucial step in maintaining robust security and efficient management.
+
 ### Benefits of the Lambda Function in AWS Security
 
 Aligning with the AWS security best practices highlighted by Paladin Cloud, this function plays a pivotal role. By automating the generation of CloudFormation templates, it ensures that your infrastructure setup is consistent, repeatable, and free from manual errors, which are often the root cause of security vulnerabilities. Additionally, by programmatically defining your infrastructure, it becomes easier to review, audit, and comply with security policies.
