@@ -14,6 +14,9 @@ elb = boto3.client('elb')
 rds = boto3.client('rds')
 s3 = boto3.client('s3')
 workspaces = boto3.client('workspaces')
+elbv2 = boto3.client('elbv2')
+lambda_client = boto3.client('lambda')
+dynamodb = boto3.client('dynamodb')
 
 # Helper functions to fetch AWS resources
 def get_vpcs():
@@ -91,6 +94,33 @@ def get_s3_buckets():
         return response['Buckets']
     except Exception as e:
         logger.error(f"Error fetching S3 buckets: {str(e)}")
+        return []
+        
+def get_elbv2_load_balancers():
+    logger.info("Fetching ELBv2 Load Balancers")
+    try:
+        response = elbv2.describe_load_balancers()
+        return response['LoadBalancers']
+    except Exception as e:
+        logger.error(f"Error fetching ELBv2 Load Balancers: {str(e)}")
+        return []
+
+def get_lambda_functions():
+    logger.info("Fetching Lambda functions")
+    try:
+        response = lambda_client.list_functions()
+        return response['Functions']
+    except Exception as e:
+        logger.error(f"Error fetching Lambda functions: {str(e)}")
+        return []
+
+def get_dynamodb_tables():
+    logger.info("Fetching DynamoDB tables")
+    try:
+        response = dynamodb.list_tables()
+        return response['TableNames']
+    except Exception as e:
+        logger.error(f"Error fetching DynamoDB tables: {str(e)}")
         return []
 
 
@@ -246,7 +276,70 @@ def cloudformation_s3_bucket(bucket):
                     }
                 ]
             },
-            # More properties can be added as per your bucket configuration
+        }
+    }
+
+def cloudformation_elbv2(lb):
+    lb_resource_name = sanitize_name(lb['LoadBalancerName'])
+    return {
+        'Type': 'AWS::ElasticLoadBalancingV2::LoadBalancer',
+        'Properties': {
+            'Name': lb['LoadBalancerName'],
+            'Type': lb['Type'],
+            'Subnets': lb.get('Subnets', []),
+            'Scheme': lb.get('Scheme', 'internet-facing'),
+            'SecurityGroups': lb.get('SecurityGroups', []),
+            'IpAddressType': lb.get('IpAddressType', 'ipv4'),
+            'LoadBalancerAttributes': [
+                {'Key': 'access_logs.s3.enabled', 'Value': 'false'},
+            ],
+            'Tags': [{'Key': tag['Key'], 'Value': tag['Value']} for tag in lb.get('Tags', [])]
+        }
+    }
+
+# CloudFormation resource function for AWS Lambda
+def cloudformation_lambda(func):
+    func_resource_name = sanitize_name(func['FunctionName'])
+    # Detailed properties
+    return {
+        'Type': 'AWS::Lambda::Function',
+        'Properties': {
+            'FunctionName': func['FunctionName'],
+            'Runtime': func['Runtime'],
+            'Role': func['Role'],
+            'Handler': func['Handler'],
+            'Code': {
+                'S3Bucket': 'your-lambda-functions-bucket',
+                'S3Key': f'{func["FunctionName"]}.zip'
+            },
+            'Environment': {
+                'Variables': {
+                    'EXAMPLE_VARIABLE': 'example_value'
+                }
+            },
+        }
+    }
+
+# CloudFormation resource function for DynamoDB Table
+def cloudformation_dynamodb_table(table_name):
+    # Detailed properties; adjust according to your table's configuration
+    return {
+        'Type': 'AWS::DynamoDB::Table',
+        'Properties': {
+            'TableName': table_name,
+            'AttributeDefinitions': [
+                {
+                    'AttributeName': 'id',
+                    'AttributeType': 'S'
+                },
+            ],
+            'KeySchema': [
+                {
+                    'AttributeName': 'id',
+                    'KeyType': 'HASH'
+                },
+            ],
+            'BillingMode': 'PAY_PER_REQUEST',
         }
     }
 
@@ -311,6 +404,27 @@ def lambda_handler(event, context):
             cf_template['Resources'][peering_resource_name] = cloudformation_vpc_peering_connection(vpc_peering)
     except Exception as e:
         logger.error(f"Error processing VPC Peering Connections: {str(e)}")
+
+    try:
+        for lb in get_elbv2_load_balancers():
+            lb_resource_name = sanitize_name(lb['LoadBalancerName'])
+            cf_template['Resources'][lb_resource_name] = cloudformation_elbv2(lb)
+    except Exception as e:
+        logger.error(f"Error processing ELBv2 Load Balancers: {str(e)}")
+
+    try:
+        for func in get_lambda_functions():
+            func_resource_name = sanitize_name(func['FunctionName'])
+            cf_template['Resources'][func_resource_name] = cloudformation_lambda(func)
+    except Exception as e:
+        logger.error(f"Error processing Lambda functions: {str(e)}")
+
+    try:
+        for table_name in get_dynamodb_tables():
+            table_resource_name = sanitize_name(table_name)
+            cf_template['Resources'][table_resource_name] = cloudformation_dynamodb_table(table_name)
+    except Exception as e:
+        logger.error(f"Error processing DynamoDB tables: {str(e)}")
 
     logger.info(f"CloudFormation Template: {json.dumps(cf_template, indent=4)}")
     return json.dumps(cf_template, indent=4)
